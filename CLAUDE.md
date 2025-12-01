@@ -1,66 +1,202 @@
-# CLAUDE.md - FHIR PlanDefinition MCP Server
+# CLAUDE.md - Implementation Guide for FHIR Immunization MCP Server
 
 ## Overview
 
-This MCP server provides FHIR R4 PlanDefinition capabilities to Claude. It connects to a FHIR server and enables listing and applying PlanDefinitions.
+This MCP server provides FHIR R4 integration focused on immunization workflows, with specific support for the WHO SMART Immunizations Implementation Guide. The server enables AI assistants to interact with FHIR servers to manage vaccination protocols, patient records, and clinical decision support.
 
-## Tools Available
+## Key FHIR Concepts
 
-### list_plan_definitions
-Lists PlanDefinition resources from the FHIR server.
+### PlanDefinition
 
-**Parameters:**
-- `status` (optional): Filter by status (draft, active, retired, unknown)
-- `name` (optional): Filter by name (partial match)
-- `count` (optional): Maximum results to return (default: 20)
+A PlanDefinition represents a pre-defined group of actions (like a vaccination protocol). The WHO SMART Immunizations IG defines many PlanDefinitions for different vaccines and scenarios:
 
-**Example usage:**
-- List all: `list_plan_definitions()`
-- Filter by status: `list_plan_definitions(status="active")`
-- Search by name: `list_plan_definitions(name="diabetes")`
-
-### apply_plan_definition
-Applies a PlanDefinition to a subject using the FHIR $apply operation.
-
-**Parameters:**
-- `plan_definition_id` (required): The ID of the PlanDefinition to apply
-- `subject` (required): Reference to the subject (e.g., "Patient/123" or just "123")
-
-**Example usage:**
-- `apply_plan_definition(plan_definition_id="example", subject="Patient/123")`
-- `apply_plan_definition(plan_definition_id="diabetes-mgmt", subject="456")`
-
-## FHIR R4 Context
-
-### PlanDefinition Resource
-A PlanDefinition represents a pre-defined group of actions to be taken in particular circumstances. Common use cases include:
-- Order sets
-- Clinical protocols
-- Care pathways
-- Decision support rules
+- **IMMZD2DT*** - Decision tables for determining vaccine eligibility
+- **IMMZD5DT*** - Contraindication checking
+- **IMMZD18S*** - Vaccination schedules
 
 ### $apply Operation
-The $apply operation instantiates a PlanDefinition for a specific context (subject). In FHIR R4, it typically returns:
-- A CarePlan with activities
-- Contained resources (ServiceRequest, MedicationRequest, etc.)
 
-## Configuration
+The `$apply` operation takes a PlanDefinition and applies it to a specific patient context, producing:
+- A **CarePlan** (FHIR R4) with recommended activities
+- Or a **Bundle** containing a RequestGroup and related resources (R5 style)
 
-The server connects to: `http://localhost:8080/fhir` by default.
+The operation evaluates CQL logic, checks conditions, and generates personalized recommendations.
 
-To change the FHIR server URL, set the `FHIR_BASE_URL` environment variable.
+### Key Resources
+
+1. **Patient** - The subject of care
+2. **Immunization** - Record of vaccine administration
+3. **Observation** - Clinical findings (e.g., weight, allergies, screening results)
+4. **CarePlan** - Generated plan with recommended activities
+5. **ValueSet/CodeSystem** - Terminology resources
+
+## Workflow Patterns
+
+### Typical Immunization Workflow
+
+1. **Find/Create Patient**
+   ```
+   search_patients(name="John Doe")
+   # or
+   create_patient(family_name="Doe", given_name="John", birth_date="2020-01-15")
+   ```
+
+2. **Check Immunization History**
+   ```
+   get_patient_immunizations(patient_id="123")
+   ```
+
+3. **List Available Protocols**
+   ```
+   list_plan_definitions(status="active")
+   ```
+
+4. **Get Protocol Details**
+   ```
+   get_plan_definition(plan_definition_id="IMMZD2DTMeaslesLowTransmission")
+   ```
+
+5. **Apply Protocol to Generate Recommendations**
+   ```
+   apply_plan_definition(
+       plan_definition_id="IMMZD2DTMeaslesLowTransmission",
+       subject="Patient/123"
+   )
+   ```
+
+6. **Record Required Observations (if needed)**
+   ```
+   create_observation(
+       patient_id="123",
+       code="29463-7",
+       code_system="http://loinc.org",
+       code_display="Body Weight",
+       value_quantity="8.5",
+       value_unit="kg"
+   )
+   ```
+
+7. **Record Immunization**
+   ```
+   create_immunization(
+       patient_id="123",
+       vaccine_code="05",
+       vaccine_system="http://hl7.org/fhir/sid/cvx",
+       vaccine_display="Measles",
+       dose_number="1"
+   )
+   ```
+
+### Terminology Lookup Pattern
+
+```
+# Find relevant ValueSet
+search_valueset(name="measles")
+
+# Get codes in ValueSet
+expand_valueset(valueset_url="http://example.org/ValueSet/measles-vaccines")
+
+# Look up specific code
+lookup_code(system="http://hl7.org/fhir/sid/cvx", code="05")
+```
+
+## WHO SMART Immunizations IG
+
+### Key URLs
+
+- Implementation Guide: https://worldhealthorganization.github.io/smart-immunizations/
+- Artifacts Index: https://worldhealthorganization.github.io/smart-immunizations/artifacts.html
+
+### Common CodeSystems
+
+- **CVX** (Vaccine codes): `http://hl7.org/fhir/sid/cvx`
+- **SNOMED CT**: `http://snomed.info/sct`
+- **LOINC** (Observations): `http://loinc.org`
+- **ICD-11**: `http://id.who.int/icd/release/11/mms`
+
+### Observation Codes for Immunizations
+
+Common LOINC codes for pre-vaccination screening:
+
+- `29463-7` - Body Weight
+- `8302-2` - Body Height
+- `30525-0` - Age
+- `82810-3` - Pregnancy status
+- `46240-8` - History of disease
+
+### Common Vaccine Codes (CVX)
+
+- `05` - Measles
+- `03` - MMR
+- `20` - DTaP
+- `10` - IPV (Polio)
+- `19` - BCG
+- `08` - Hepatitis B
+- `133` - Pneumococcal conjugate PCV13
+- `116` - Rotavirus
 
 ## Error Handling
 
-The server handles:
-- Connection errors (FHIR server unavailable)
-- HTTP errors (4xx, 5xx responses)
-- FHIR OperationOutcome responses
-- Missing required parameters
+The server handles common FHIR errors:
 
-## Best Practices for Claude
+- **404** - Resource not found
+- **400** - Bad request (invalid parameters)
+- **422** - Unprocessable entity (validation errors)
 
-1. **Always list first**: Before applying a PlanDefinition, list available ones to get valid IDs
-2. **Verify subjects exist**: The subject (Patient, etc.) must exist on the FHIR server
-3. **Check status**: Only "active" PlanDefinitions are typically meant for production use
-4. **Review results**: The $apply result shows what actions would be taken - review before actual implementation
+Error responses include details from the FHIR server when available.
+
+## Environment Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| FHIR_BASE_URL | http://localhost:8080/fhir | Base URL of FHIR R4 server |
+
+## Docker Networking
+
+When running in Docker, use `host.docker.internal` to access services on the host:
+
+```yaml
+env:
+  - name: FHIR_BASE_URL
+    value: "http://host.docker.internal:8080/fhir"
+```
+
+## Tool Parameters
+
+All tool parameters:
+- Use empty string defaults (`""`) not `None`
+- Should be checked with `.strip()` before use
+- Are optional unless explicitly required by the function
+
+## Response Formatting
+
+Tools return formatted strings with:
+- Emojis for visual clarity (📋 📄 💉 👤 etc.)
+- Markdown formatting for structure
+- JSON code blocks for raw data when needed
+
+## Testing with HAPI FHIR
+
+To run a local HAPI FHIR server with Clinical Reasoning support:
+
+```bash
+docker run -p 8080:8080 hapiproject/hapi:latest
+```
+
+For WHO SMART Immunizations, you'll need to load the IG resources:
+1. Download the IG package from the IG publisher output
+2. POST the resources to your FHIR server
+
+## Limitations
+
+1. **No Authentication** - Current implementation doesn't include SMART on FHIR auth
+2. **No CQL Evaluation** - Relies on FHIR server for CQL evaluation in $apply
+3. **R4 Focus** - Designed for FHIR R4, may need adjustments for R5
+
+## Future Enhancements
+
+- SMART on FHIR authentication support
+- Batch operations for multiple patients
+- ImmunizationRecommendation resource support
+- AEFI (Adverse Event Following Immunization) reporting
+- Integration with immunization registries
