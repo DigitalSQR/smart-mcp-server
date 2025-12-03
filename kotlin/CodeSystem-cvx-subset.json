@@ -1,0 +1,63 @@
+{
+  "resourceType": "CodeSystem",
+  "id": "example-cvx-subset",
+  "url": "http://example.org/fhir/CodeSystem/cvx-subset",
+  "version": "1.0.0",
+  "name": "CVXSubset",
+  "title": "CVX Vaccine Codes Subset",
+  "status": "active",
+  "content": "complete",
+  "count": 10,
+  "concept": [
+    {
+      "code": "03",
+      "display": "MMR",
+      "definition": "Measles, mumps, rubella virus vaccine"
+    },
+    {
+      "code": "05",
+      "display": "Measles",
+      "definition": "Measles virus vaccine"
+    },
+    {
+      "code": "08",
+      "display": "Hepatitis B",
+      "definition": "Hepatitis B vaccine, pediatric or pediatric/adolescent dosage"
+    },
+    {
+      "code": "10",
+      "display": "IPV",
+      "definition": "Poliovirus vaccine, inactivated"
+    },
+    {
+      "code": "19",
+      "display": "BCG",
+      "definition": "Bacillus Calmette-Guerin vaccine"
+    },
+    {
+      "code": "20",
+      "display": "DTaP",
+      "definition": "Diphtheria, tetanus toxoids and acellular pertussis vaccine"
+    },
+    {
+      "code": "116",
+      "display": "Rotavirus",
+      "definition": "Rotavirus vaccine, pentavalent"
+    },
+    {
+      "code": "133",
+      "display": "PCV13",
+      "definition": "Pneumococcal conjugate vaccine, 13 valent"
+    },
+    {
+      "code": "141",
+      "display": "Influenza",
+      "definition": "Influenza, seasonal, injectable"
+    },
+    {
+      "code": "21",
+      "display": "Varicella",
+      "definition": "Varicella virus vaccine"
+    }
+  ]
+}
