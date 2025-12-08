@@ -1,202 +1,162 @@
-# CLAUDE.md - Implementation Guide for FHIR Immunization MCP Server
+# CLAUDE.md - FHIR MCP Server Implementation Guide
 
 ## Overview
 
-This MCP server provides FHIR R4 integration focused on immunization workflows, with specific support for the WHO SMART Immunizations Implementation Guide. The server enables AI assistants to interact with FHIR servers to manage vaccination protocols, patient records, and clinical decision support.
+This is a Model Context Protocol (MCP) server that enables AI assistants to interact with FHIR R4 healthcare data servers. It provides tools for working with clinical protocols (PlanDefinitions), managing healthcare resources, and querying medical terminology.
 
-## Key FHIR Concepts
+## Key Capabilities
 
-### PlanDefinition
+### 1. PlanDefinition & CarePlan Workflow
 
-A PlanDefinition represents a pre-defined group of actions (like a vaccination protocol). The WHO SMART Immunizations IG defines many PlanDefinitions for different vaccines and scenarios:
+The server supports the complete workflow for clinical protocols:
 
-- **IMMZD2DT*** - Decision tables for determining vaccine eligibility
-- **IMMZD5DT*** - Contraindication checking
-- **IMMZD18S*** - Vaccination schedules
+1. **List PlanDefinitions**: Discover available clinical protocols
+2. **Get PlanDefinition Details**: Inspect actions, conditions, and requirements
+3. **Apply PlanDefinition**: Generate a CarePlan for a specific patient
+4. **Create Supporting Resources**: Create any required resources (Observations, Immunizations, etc.)
 
-### $apply Operation
+### 2. Generic Resource Management
 
-The `$apply` operation takes a PlanDefinition and applies it to a specific patient context, producing:
-- A **CarePlan** (FHIR R4) with recommended activities
-- Or a **Bundle** containing a RequestGroup and related resources (R5 style)
+The `fhir_create_resource` tool accepts **raw FHIR JSON**, enabling creation of any valid FHIR R4 resource without being limited to predefined schemas. This is critical for:
 
-The operation evaluates CQL logic, checks conditions, and generates personalized recommendations.
+- Supporting any resource type the plan definition requires
+- Creating Observations with the appropriate codes
+- Maintaining flexibility for different implementation guides
 
-### Key Resources
+### 3. Terminology Services
 
-1. **Patient** - The subject of care
-2. **Immunization** - Record of vaccine administration
-3. **Observation** - Clinical findings (e.g., weight, allergies, screening results)
-4. **CarePlan** - Generated plan with recommended activities
-5. **ValueSet/CodeSystem** - Terminology resources
+- **CodeSystem $lookup**: Find display names and properties for codes
+- **ValueSet $expand**: Get all codes in a value set
+- Search and list CodeSystems and ValueSets
 
-## Workflow Patterns
+### 4. ImplementationGuide Context
 
-### Typical Immunization Workflow
+Users can set an ImplementationGuide context to inform the AI about:
+- Which profiles to use
+- What codes are appropriate
+- Dependencies and constraints
 
-1. **Find/Create Patient**
-   ```
-   search_patients(name="John Doe")
-   # or
-   create_patient(family_name="Doe", given_name="John", birth_date="2020-01-15")
-   ```
+## Tool Summary
 
-2. **Check Immunization History**
-   ```
-   get_patient_immunizations(patient_id="123")
-   ```
+| Tool | Purpose | Read-Only |
+|------|---------|-----------|
+| `fhir_list_plan_definitions` | List available clinical protocols | ✅ |
+| `fhir_get_plan_definition` | Get protocol details with actions | ✅ |
+| `fhir_apply_plan_definition` | Generate CarePlan from protocol | ✅ |
+| `fhir_create_resource` | Create any FHIR resource | ❌ |
+| `fhir_update_resource` | Update existing resource | ❌ |
+| `fhir_get_resource` | Retrieve resource by type/ID | ✅ |
+| `fhir_search_resources` | Search resources with params | ✅ |
+| `fhir_delete_resource` | Delete a resource | ❌ |
+| `fhir_lookup_code` | Look up code in CodeSystem | ✅ |
+| `fhir_expand_valueset` | Expand ValueSet to get codes | ✅ |
+| `fhir_list_codesystems` | List available CodeSystems | ✅ |
+| `fhir_list_valuesets` | List available ValueSets | ✅ |
+| `fhir_list_implementation_guides` | List IGs on server | ✅ |
+| `fhir_get_implementation_guide` | Get IG details | ✅ |
+| `fhir_set_implementation_guide_context` | Set active IG context | ❌ |
+| `fhir_get_current_implementation_guide_context` | View current IG | ✅ |
+| `fhir_get_server_capability` | Get server capabilities | ✅ |
 
-3. **List Available Protocols**
-   ```
-   list_plan_definitions(status="active")
-   ```
+## Immunization Use Case
 
-4. **Get Protocol Details**
-   ```
-   get_plan_definition(plan_definition_id="IMMZD2DTMeaslesLowTransmission")
-   ```
-
-5. **Apply Protocol to Generate Recommendations**
-   ```
-   apply_plan_definition(
-       plan_definition_id="IMMZD2DTMeaslesLowTransmission",
-       subject="Patient/123"
-   )
-   ```
-
-6. **Record Required Observations (if needed)**
-   ```
-   create_observation(
-       patient_id="123",
-       code="29463-7",
-       code_system="http://loinc.org",
-       code_display="Body Weight",
-       value_quantity="8.5",
-       value_unit="kg"
-   )
-   ```
-
-7. **Record Immunization**
-   ```
-   create_immunization(
-       patient_id="123",
-       vaccine_code="05",
-       vaccine_system="http://hl7.org/fhir/sid/cvx",
-       vaccine_display="Measles",
-       dose_number="1"
-   )
-   ```
-
-### Terminology Lookup Pattern
+For immunization workflows, the typical pattern is:
 
 ```
-# Find relevant ValueSet
-search_valueset(name="measles")
+1. User: "Apply the immunization plan for Patient/123"
 
-# Get codes in ValueSet
-expand_valueset(valueset_url="http://example.org/ValueSet/measles-vaccines")
+2. Agent actions:
+   a. Call fhir_list_plan_definitions to find immunization protocols
+   b. Call fhir_get_plan_definition to understand requirements
+   c. Call fhir_apply_plan_definition with subject=Patient/123
+   d. Parse the returned CarePlan to understand needed activities
+   e. For each activity:
+      - If Immunization needed: use fhir_create_resource with Immunization JSON
+      - If Observation needed: use fhir_create_resource with Observation JSON
+      - Look up appropriate codes using fhir_expand_valueset or fhir_lookup_code
 
-# Look up specific code
-lookup_code(system="http://hl7.org/fhir/sid/cvx", code="05")
+3. Response: Summarize what was created and any pending items
 ```
 
-## WHO SMART Immunizations IG
+## Code Discovery
 
-### Key URLs
+When creating Observations or other coded resources:
 
-- Implementation Guide: https://worldhealthorganization.github.io/smart-immunizations/
-- Artifacts Index: https://worldhealthorganization.github.io/smart-immunizations/artifacts.html
+1. **Check ImplementationGuide**: Get context for appropriate code systems
+2. **Expand ValueSets**: Find valid codes for specific fields
+3. **Lookup Codes**: Get display names and verify codes exist
 
-### Common CodeSystems
+Example for finding observation codes:
+```
+1. fhir_list_valuesets with name filter for "observation"
+2. fhir_expand_valueset to get codes
+3. Select appropriate code based on context
+4. fhir_create_resource with properly coded Observation
+```
 
-- **CVX** (Vaccine codes): `http://hl7.org/fhir/sid/cvx`
-- **SNOMED CT**: `http://snomed.info/sct`
-- **LOINC** (Observations): `http://loinc.org`
-- **ICD-11**: `http://id.who.int/icd/release/11/mms`
+## Creating Resources with Raw JSON
 
-### Observation Codes for Immunizations
+The `fhir_create_resource` tool requires a complete, valid FHIR JSON string. Example:
 
-Common LOINC codes for pre-vaccination screening:
-
-- `29463-7` - Body Weight
-- `8302-2` - Body Height
-- `30525-0` - Age
-- `82810-3` - Pregnancy status
-- `46240-8` - History of disease
-
-### Common Vaccine Codes (CVX)
-
-- `05` - Measles
-- `03` - MMR
-- `20` - DTaP
-- `10` - IPV (Polio)
-- `19` - BCG
-- `08` - Hepatitis B
-- `133` - Pneumococcal conjugate PCV13
-- `116` - Rotavirus
+```json
+{
+  "resourceType": "Observation",
+  "status": "final",
+  "category": [{
+    "coding": [{
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "vital-signs",
+      "display": "Vital Signs"
+    }]
+  }],
+  "code": {
+    "coding": [{
+      "system": "http://loinc.org",
+      "code": "8302-2",
+      "display": "Body height"
+    }]
+  },
+  "subject": {
+    "reference": "Patient/123"
+  },
+  "valueQuantity": {
+    "value": 170,
+    "unit": "cm",
+    "system": "http://unitsofmeasure.org",
+    "code": "cm"
+  }
+}
+```
 
 ## Error Handling
 
-The server handles common FHIR errors:
+The server provides detailed error messages including:
+- FHIR OperationOutcome parsing for server errors
+- HTTP status code explanations
+- Actionable suggestions for common issues
 
-- **404** - Resource not found
-- **400** - Bad request (invalid parameters)
-- **422** - Unprocessable entity (validation errors)
+## Configuration
 
-Error responses include details from the FHIR server when available.
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `FHIR_SERVER_URL` | `http://localhost:8080/fhir` | FHIR server base URL |
 
-## Environment Configuration
+## Best Practices for AI Agents
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| FHIR_BASE_URL | http://localhost:8080/fhir | Base URL of FHIR R4 server |
+1. **Always check server capabilities first** when unsure about supported operations
+2. **Use ImplementationGuide context** to understand expected profiles and codes
+3. **Validate codes exist** before creating resources with coded elements
+4. **Parse CarePlan activities** carefully after applying PlanDefinitions
+5. **Create resources incrementally** and handle errors gracefully
+6. **Use search** to find existing resources before creating duplicates
 
-## Docker Networking
+## FHIR R4 Reference
 
-When running in Docker, use `host.docker.internal` to access services on the host:
-
-```yaml
-env:
-  - name: FHIR_BASE_URL
-    value: "http://host.docker.internal:8080/fhir"
-```
-
-## Tool Parameters
-
-All tool parameters:
-- Use empty string defaults (`""`) not `None`
-- Should be checked with `.strip()` before use
-- Are optional unless explicitly required by the function
-
-## Response Formatting
-
-Tools return formatted strings with:
-- Emojis for visual clarity (📋 📄 💉 👤 etc.)
-- Markdown formatting for structure
-- JSON code blocks for raw data when needed
-
-## Testing with HAPI FHIR
-
-To run a local HAPI FHIR server with Clinical Reasoning support:
-
-```bash
-docker run -p 8080:8080 hapiproject/hapi:latest
-```
-
-For WHO SMART Immunizations, you'll need to load the IG resources:
-1. Download the IG package from the IG publisher output
-2. POST the resources to your FHIR server
-
-## Limitations
-
-1. **No Authentication** - Current implementation doesn't include SMART on FHIR auth
-2. **No CQL Evaluation** - Relies on FHIR server for CQL evaluation in $apply
-3. **R4 Focus** - Designed for FHIR R4, may need adjustments for R5
-
-## Future Enhancements
-
-- SMART on FHIR authentication support
-- Batch operations for multiple patients
-- ImmunizationRecommendation resource support
-- AEFI (Adverse Event Following Immunization) reporting
-- Integration with immunization registries
+Key resources for this server:
+- [PlanDefinition](https://hl7.org/fhir/R4/plandefinition.html)
+- [CarePlan](https://hl7.org/fhir/R4/careplan.html)
+- [Observation](https://hl7.org/fhir/R4/observation.html)
+- [Immunization](https://hl7.org/fhir/R4/immunization.html)
+- [CodeSystem](https://hl7.org/fhir/R4/codesystem.html)
+- [ValueSet](https://hl7.org/fhir/R4/valueset.html)
+- [ImplementationGuide](https://hl7.org/fhir/R4/implementationguide.html)
