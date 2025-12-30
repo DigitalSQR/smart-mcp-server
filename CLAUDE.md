@@ -1,162 +1,130 @@
 # CLAUDE.md - FHIR MCP Server Implementation Guide
 
+This document provides guidance for AI agents using the FHIR MCP Server.
+
 ## Overview
 
-This is a Model Context Protocol (MCP) server that enables AI assistants to interact with FHIR R4 healthcare data servers. It provides tools for working with clinical protocols (PlanDefinitions), managing healthcare resources, and querying medical terminology.
+This MCP server enables interaction with FHIR R4 servers for clinical decision support workflows. It supports PlanDefinition execution, resource management, terminology services, and Questionnaire-based data capture with StructureMap transformation.
 
-## Key Capabilities
+## Key Concepts
 
-### 1. PlanDefinition & CarePlan Workflow
-
-The server supports the complete workflow for clinical protocols:
-
-1. **List PlanDefinitions**: Discover available clinical protocols
-2. **Get PlanDefinition Details**: Inspect actions, conditions, and requirements
-3. **Apply PlanDefinition**: Generate a CarePlan for a specific patient
-4. **Create Supporting Resources**: Create any required resources (Observations, Immunizations, etc.)
-
-### 2. Generic Resource Management
-
-The `fhir_create_resource` tool accepts **raw FHIR JSON**, enabling creation of any valid FHIR R4 resource without being limited to predefined schemas. This is critical for:
-
-- Supporting any resource type the plan definition requires
-- Creating Observations with the appropriate codes
-- Maintaining flexibility for different implementation guides
-
-### 3. Terminology Services
-
-- **CodeSystem $lookup**: Find display names and properties for codes
-- **ValueSet $expand**: Get all codes in a value set
-- Search and list CodeSystems and ValueSets
-
-### 4. ImplementationGuide Context
-
-Users can set an ImplementationGuide context to inform the AI about:
-- Which profiles to use
-- What codes are appropriate
-- Dependencies and constraints
-
-## Tool Summary
-
-| Tool | Purpose | Read-Only |
-|------|---------|-----------|
-| `fhir_list_plan_definitions` | List available clinical protocols | ✅ |
-| `fhir_get_plan_definition` | Get protocol details with actions | ✅ |
-| `fhir_apply_plan_definition` | Generate CarePlan from protocol | ✅ |
-| `fhir_create_resource` | Create any FHIR resource | ❌ |
-| `fhir_update_resource` | Update existing resource | ❌ |
-| `fhir_get_resource` | Retrieve resource by type/ID | ✅ |
-| `fhir_search_resources` | Search resources with params | ✅ |
-| `fhir_delete_resource` | Delete a resource | ❌ |
-| `fhir_lookup_code` | Look up code in CodeSystem | ✅ |
-| `fhir_expand_valueset` | Expand ValueSet to get codes | ✅ |
-| `fhir_list_codesystems` | List available CodeSystems | ✅ |
-| `fhir_list_valuesets` | List available ValueSets | ✅ |
-| `fhir_list_implementation_guides` | List IGs on server | ✅ |
-| `fhir_get_implementation_guide` | Get IG details | ✅ |
-| `fhir_set_implementation_guide_context` | Set active IG context | ❌ |
-| `fhir_get_current_implementation_guide_context` | View current IG | ✅ |
-| `fhir_get_server_capability` | Get server capabilities | ✅ |
-
-## Immunization Use Case
-
-For immunization workflows, the typical pattern is:
-
+### ImplementationGuide Context
+Before creating resources, set the ImplementationGuide context to enable profile validation:
 ```
-1. User: "Apply the immunization plan for Patient/123"
-
-2. Agent actions:
-   a. Call fhir_list_plan_definitions to find immunization protocols
-   b. Call fhir_get_plan_definition to understand requirements
-   c. Call fhir_apply_plan_definition with subject=Patient/123
-   d. Parse the returned CarePlan to understand needed activities
-   e. For each activity:
-      - If Immunization needed: use fhir_create_resource with Immunization JSON
-      - If Observation needed: use fhir_create_resource with Observation JSON
-      - Look up appropriate codes using fhir_expand_valueset or fhir_lookup_code
-
-3. Response: Summarize what was created and any pending items
+fhir_set_implementation_guide_context(implementation_guide_id="my-ig-id")
 ```
 
-## Code Discovery
+### PlanDefinition Workflow
+1. List available PlanDefinitions
+2. Get PlanDefinition details to understand required inputs
+3. Ensure required resources exist (Patient, Observations, etc.)
+4. Apply the PlanDefinition to generate a CarePlan
+5. Process the CarePlan activities
 
-When creating Observations or other coded resources:
+### Questionnaire Workflow
+1. Get the Questionnaire structure
+2. Ask the user each question based on Questionnaire items
+3. Construct a QuestionnaireResponse JSON
+4. Transform via Matchbox to create FHIR resources
+5. Save the transformed resources to the FHIR server
 
-1. **Check ImplementationGuide**: Get context for appropriate code systems
-2. **Expand ValueSets**: Find valid codes for specific fields
-3. **Lookup Codes**: Get display names and verify codes exist
+## Tool Reference
 
-Example for finding observation codes:
-```
-1. fhir_list_valuesets with name filter for "observation"
-2. fhir_expand_valueset to get codes
-3. Select appropriate code based on context
-4. fhir_create_resource with properly coded Observation
-```
+### Context Management
+- `fhir_set_implementation_guide_context` - Set IG for validation
+- `fhir_get_current_implementation_guide_context` - Check current IG
+- `fhir_get_implementation_guide` - Get IG details
+- `fhir_list_implementation_guides` - List available IGs
 
-## Creating Resources with Raw JSON
+### PlanDefinition
+- `fhir_list_plan_definitions` - List with optional status/title filters
+- `fhir_get_plan_definition` - Get full details including actions
+- `fhir_apply_plan_definition` - Execute $apply operation
 
-The `fhir_create_resource` tool requires a complete, valid FHIR JSON string. Example:
+### Resources
+- `fhir_get_resource` - Get by type and ID
+- `fhir_search_resources` - Search with FHIR parameters
+- `fhir_create_resource` - Create using raw JSON
+- `fhir_update_resource` - Update existing resource
+- `fhir_delete_resource` - Delete resource
+
+### Terminology
+- `fhir_list_valuesets` - List ValueSets
+- `fhir_expand_valueset` - Get codes in a ValueSet
+- `fhir_list_codesystems` - List CodeSystems
+- `fhir_lookup_code` - Look up code display/properties
+
+### Questionnaire
+- `fhir_get_questionnaire` - Get questionnaire structure
+- `fhir_list_questionnaires` - List available questionnaires
+- `fhir_transform_questionnaire_response` - Transform via StructureMap
+
+### Server
+- `fhir_get_server_capability` - Get CapabilityStatement
+
+## Creating Resources
+
+Always use `fhir_create_resource` with complete FHIR JSON:
 
 ```json
 {
-  "resourceType": "Observation",
-  "status": "final",
-  "category": [{
-    "coding": [{
-      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
-      "code": "vital-signs",
-      "display": "Vital Signs"
-    }]
-  }],
-  "code": {
-    "coding": [{
-      "system": "http://loinc.org",
-      "code": "8302-2",
-      "display": "Body height"
-    }]
-  },
-  "subject": {
-    "reference": "Patient/123"
-  },
-  "valueQuantity": {
-    "value": 170,
-    "unit": "cm",
-    "system": "http://unitsofmeasure.org",
-    "code": "cm"
-  }
+  "resourceType": "Patient",
+  "name": [{"family": "Smith", "given": ["John"]}],
+  "birthDate": "1980-01-15",
+  "gender": "male"
+}
+```
+
+For Observations, look up appropriate codes first:
+```
+fhir_expand_valueset(valueset_url="http://hl7.org/fhir/ValueSet/observation-codes")
+fhir_lookup_code(system="http://loinc.org", code="8867-4")
+```
+
+## QuestionnaireResponse Structure
+
+When building a QuestionnaireResponse:
+
+```json
+{
+  "resourceType": "QuestionnaireResponse",
+  "questionnaire": "Questionnaire/my-questionnaire",
+  "status": "completed",
+  "subject": {"reference": "Patient/123"},
+  "item": [
+    {
+      "linkId": "question-1",
+      "answer": [{"valueString": "User's answer"}]
+    },
+    {
+      "linkId": "question-2",
+      "answer": [{"valueDate": "2024-01-15"}]
+    }
+  ]
 }
 ```
 
 ## Error Handling
 
-The server provides detailed error messages including:
-- FHIR OperationOutcome parsing for server errors
-- HTTP status code explanations
-- Actionable suggestions for common issues
+The server returns structured error messages:
+- `❌ Error:` - General errors
+- `❌ HTTP Error:` - FHIR server HTTP errors
+- `❌ Validation Error:` - Resource validation failures
+- `❌ Operation Error:` - FHIR operation failures
+- `❌ Transform Error:` - StructureMap transformation failures
 
-## Configuration
+Always check for OperationOutcome details in error responses.
 
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `FHIR_SERVER_URL` | `http://localhost:8080/fhir` | FHIR server base URL |
+## Best Practices
 
-## Best Practices for AI Agents
+1. **Always set IG context** before creating profiled resources
+2. **Use terminology tools** to find correct codes
+3. **Validate Questionnaire items** before building responses
+4. **Check PlanDefinition inputs** before applying
+5. **Use response_format="json"** when you need to process data programmatically
+6. **Use response_format="markdown"** for human-readable summaries
 
-1. **Always check server capabilities first** when unsure about supported operations
-2. **Use ImplementationGuide context** to understand expected profiles and codes
-3. **Validate codes exist** before creating resources with coded elements
-4. **Parse CarePlan activities** carefully after applying PlanDefinitions
-5. **Create resources incrementally** and handle errors gracefully
-6. **Use search** to find existing resources before creating duplicates
+## Environment Configuration
 
-## FHIR R4 Reference
-
-Key resources for this server:
-- [PlanDefinition](https://hl7.org/fhir/R4/plandefinition.html)
-- [CarePlan](https://hl7.org/fhir/R4/careplan.html)
-- [Observation](https://hl7.org/fhir/R4/observation.html)
-- [Immunization](https://hl7.org/fhir/R4/immunization.html)
-- [CodeSystem](https://hl7.org/fhir/R4/codesystem.html)
-- [ValueSet](https://hl7.org/fhir/R4/valueset.html)
-- [ImplementationGuide](https://hl7.org/fhir/R4/implementationguide.html)
+- `FHIR_SERVER_URL` - Main FHIR server (default: http://localhost:8080/fhir)
+- `MATCHBOX_SERVER_URL` - Matchbox for transforms (default: http://localhost:8081/matchboxv3/fhir)

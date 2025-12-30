@@ -14,7 +14,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the server code
-COPY fhir_mcp_server.py .
+COPY fhir_server.py .
 
 # Create non-root user
 RUN useradd -m -u 1000 mcpuser && \
@@ -24,4 +24,4 @@ RUN useradd -m -u 1000 mcpuser && \
 USER mcpuser
 
 # Run the server
-CMD ["python", "fhir_mcp_server.py"]
+CMD ["python", "fhir_server.py"]
