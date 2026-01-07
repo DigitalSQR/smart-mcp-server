@@ -345,7 +345,7 @@ async def fhir_apply_plan_definition(plan_definition_id: str, subject: str, enco
         if organization.strip():
             params["organization"] = organization
         
-        result = await make_fhir_request("POST", f"PlanDefinition/{plan_definition_id}/$apply", params=params)
+        result = await make_fhir_request("GET", f"PlanDefinition/{plan_definition_id}/$apply", params=params)
         
         return json.dumps(result, indent=2)
     
